@@ -1,5 +1,17 @@
 # PoC XFN2 Implementation Progress
 
+## Repository Structure
+
+This project has been moved to a dedicated repository:
+- **Location**: `schedar-devcontainer/appcat-poc/`
+- **Structure**:
+  - `appcat-poc/kcl/` - KCL configuration layer
+  - `appcat-poc/poc-xfn2/` - Crossplane function implementation (this directory)
+- **Git**: Independent repository initialized on 2025-12-01
+- **Previous**: Was in `appcat/poc-xfn2`, now standalone with KCL
+
+---
+
 ## Phase 1: Add Minimal Resources to PoC
 
 ### ✅ Completed (62.5%)
