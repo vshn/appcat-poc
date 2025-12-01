@@ -1,0 +1,9 @@
+# Binary
+function-appcat-poc
+poc-xfn2
+
+# Packages
+package/*.xpkg
+
+# Go build cache
+.work/

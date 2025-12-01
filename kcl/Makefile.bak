@@ -1,0 +1,188 @@
+# KCL-based AppCat Build System
+# This Makefile generates Crossplane artifacts from KCL definitions
+
+# Variables
+KCL_BIN := kcl
+OUTPUT_DIR := output
+XPKG_DIR := $(OUTPUT_DIR)/xpkg
+CATALOG_DIR := $(OUTPUT_DIR)/cluster-catalog
+PLATFORM_DIR := $(OUTPUT_DIR)/platform
+SCRIPTS_DIR := scripts
+PACKAGE_DIR := packages
+
+# Services
+SERVICES := postgres
+
+# Cluster modes (legacy, for parameter-based builds)
+MODES := converged control_plane service_cluster
+
+# Platforms (legacy, for parameter-based builds)
+PLATFORMS := kubernetes openshift
+
+# Clusters (for cluster-based builds)
+CLUSTERS := dev-1 prod-control-plane-1 prod-service-1
+
+.PHONY: all clean validate build package test help
+
+help: ## Show this help message
+	@echo "AppCat KCL Build System"
+	@echo ""
+	@echo "Usage: make [target]"
+	@echo ""
+	@echo "Targets:"
+	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  %-20s %s\n", $$1, $$2}'
+
+all: clean build validate package ## Build all artifacts
+
+clean: ## Clean generated outputs
+	@echo "==> Cleaning output directories..."
+	rm -rf $(OUTPUT_DIR) $(PACKAGE_DIR)
+	@echo "==> Clean complete"
+
+validate: ## Validate KCL configurations
+	@echo "==> Validating KCL configurations..."
+	@for service in $(SERVICES); do \
+		echo "  Validating service: $$service"; \
+		$(KCL_BIN) vet kcl/services/$$service/*.k || exit 1; \
+	done
+	@echo "  Validating platform definitions"; \
+	$(KCL_BIN) vet kcl/platform/*.k || exit 1
+	@echo "  Validating base definitions"; \
+	$(KCL_BIN) vet kcl/defs/*.k || exit 1
+	@echo "==> Validation complete"
+
+build: build-platform build-services build-catalogs ## Build all outputs
+
+build-platform: ## Build platform manifests (Crossplane installation)
+	@echo "==> Building platform manifests..."
+	mkdir -p $(PLATFORM_DIR)
+	@for platform in $(PLATFORMS); do \
+		echo "  Generating platform manifests for $$platform"; \
+		$(KCL_BIN) run kcl/platform/crossplane.k -D platform=$$platform -o $(PLATFORM_DIR)/crossplane-$$platform.yaml; \
+	done
+	@echo "==> Platform manifests built"
+
+build-services: ## Build service xpkg artifacts
+	@echo "==> Building service xpkg artifacts..."
+	mkdir -p $(XPKG_DIR)
+	@for service in $(SERVICES); do \
+		echo "  Generating xpkg for service: $$service"; \
+		mkdir -p $(XPKG_DIR)/$$service; \
+		$(KCL_BIN) run kcl/services/$$service/xpkg.k -o $(XPKG_DIR)/$$service/all.yaml; \
+		$(SCRIPTS_DIR)/split-xpkg.sh $(XPKG_DIR)/$$service/all.yaml $(XPKG_DIR)/$$service; \
+	done
+	@echo "==> Service xpkg artifacts built"
+
+build-catalogs: ## Build cluster catalog manifests (legacy parameter-based)
+	@echo "==> Building cluster catalog manifests (legacy mode)..."
+	@for service in $(SERVICES); do \
+		for mode in $(MODES); do \
+			for platform in $(PLATFORMS); do \
+				echo "  Generating catalog for service: $$service, mode: $$mode, platform: $$platform"; \
+				mkdir -p $(CATALOG_DIR)/$$service/$$mode/$$platform; \
+				$(KCL_BIN) run kcl/services/$$service/cluster_catalog.k \
+					-D mode=$$mode \
+					-D platform=$$platform \
+					-o $(CATALOG_DIR)/$$service/$$mode/$$platform/catalog.yaml; \
+			done; \
+		done; \
+	done
+	@echo "==> Cluster catalog manifests built"
+
+build-clusters: ## Build cluster catalog manifests for all clusters
+	@echo "==> Building cluster catalogs for all clusters..."
+	@for cluster in $(CLUSTERS); do \
+		for service in $(SERVICES); do \
+			echo "  Generating catalog for cluster: $$cluster, service: $$service"; \
+			mkdir -p $(CATALOG_DIR)/clusters/$$cluster/$$service; \
+			$(KCL_BIN) run services/$$service/cluster_catalog.k \
+				-D cluster=$$cluster \
+				-o $(CATALOG_DIR)/clusters/$$cluster/$$service/catalog.yaml; \
+		done; \
+	done
+	@echo "==> Cluster catalogs built"
+
+build-cluster: ## Build cluster catalog for a specific cluster (usage: make build-cluster CLUSTER=dev-1)
+ifndef CLUSTER
+	@echo "Error: CLUSTER variable must be set"
+	@echo "Usage: make build-cluster CLUSTER=dev-1"
+	@exit 1
+endif
+	@echo "==> Building catalog for cluster: $(CLUSTER)..."
+	@for service in $(SERVICES); do \
+		echo "  Generating catalog for service: $$service"; \
+		mkdir -p $(CATALOG_DIR)/clusters/$(CLUSTER)/$$service; \
+		$(KCL_BIN) run services/$$service/cluster_catalog.k \
+			-D cluster=$(CLUSTER) \
+			-o $(CATALOG_DIR)/clusters/$(CLUSTER)/$$service/catalog.yaml; \
+	done
+	@echo "==> Cluster catalog built for $(CLUSTER)"
+
+package: ## Package xpkg artifacts as OCI images
+	@echo "==> Packaging xpkg artifacts..."
+	mkdir -p $(PACKAGE_DIR)
+	@for service in $(SERVICES); do \
+		echo "  Packaging service: $$service"; \
+		$(SCRIPTS_DIR)/package-xpkg.sh $(XPKG_DIR)/$$service $(PACKAGE_DIR)/$$service.xpkg; \
+	done
+	@echo "==> Packaging complete"
+
+test: ## Run end-to-end tests
+	@echo "==> Running end-to-end tests..."
+	$(SCRIPTS_DIR)/e2e-test.sh
+	@echo "==> Tests complete"
+
+setup-kind: ## Setup Kind clusters for testing
+	@echo "==> Setting up Kind clusters..."
+	$(SCRIPTS_DIR)/setup-kind.sh
+	@echo "==> Kind clusters ready"
+
+teardown-kind: ## Teardown Kind clusters
+	@echo "==> Tearing down Kind clusters..."
+	kind delete cluster --name mgmt || true
+	kind delete cluster --name svc || true
+	@echo "==> Kind clusters removed"
+
+watch-postgres: ## Watch PostgreSQL instance creation
+	@echo "==> Watching PostgreSQL instances..."
+	kubectl get xvshnpostgresql -A -w
+
+logs-crossplane: ## Show Crossplane logs
+	@echo "==> Fetching Crossplane logs..."
+	kubectl logs -n crossplane-system -l app=crossplane -f
+
+# Development targets
+dev-build: ## Fast build for development (skip validation)
+	@echo "==> Fast build (no validation)..."
+	@$(MAKE) build --no-print-directory
+	@echo "==> Fast build complete"
+
+dev-install: dev-build ## Build and install to Kind clusters
+	@echo "==> Installing to Kind clusters..."
+	kubectl apply -f $(PLATFORM_DIR)/crossplane-kubernetes.yaml --context kind-mgmt || true
+	@for service in $(SERVICES); do \
+		kubectl apply -f $(XPKG_DIR)/$$service --context kind-mgmt || true; \
+	done
+	@echo "==> Installation complete"
+
+# Format and lint
+fmt: ## Format KCL files
+	@echo "==> Formatting KCL files..."
+	$(KCL_BIN) fmt kcl/**/*.k
+	@echo "==> Formatting complete"
+
+lint: ## Lint KCL files
+	@echo "==> Linting KCL files..."
+	$(KCL_BIN) lint kcl/**/*.k
+	@echo "==> Linting complete"
+
+# Documentation
+docs: ## Generate documentation from KCL schemas
+	@echo "==> Generating documentation..."
+	mkdir -p docs
+	$(KCL_BIN) doc generate -o docs kcl/defs
+	@echo "==> Documentation generated in docs/"
+
+.PHONY: build-platform build-services build-catalogs build-clusters build-cluster
+.PHONY: setup-kind teardown-kind watch-postgres logs-crossplane
+.PHONY: dev-build dev-install fmt lint docs

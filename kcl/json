@@ -1,0 +1,79 @@
+facts:
+  name: prod-service-1
+  cloud: exoscale
+  region: rma
+  distribution: openshift4.12
+platform:
+  type: openshift
+  distribution: openshift4.12
+clusterMode:
+  mode: service_cluster
+  controlPlaneKubeconfig: /etc/kubeconfig/control-plane
+isOpenshift: true
+isConverged: false
+isControlPlane: false
+isServiceCluster: true
+config:
+  mode:
+    mode: service_cluster
+    controlPlaneKubeconfig: /etc/kubeconfig/control-plane
+  components:
+    controller:
+      enabled: false
+      replicas: 1
+      splitMode: false
+    apiServer:
+      enabled: false
+      replicas: 1
+      splitMode: false
+    sliExporter:
+      enabled: false
+      replicas: 1
+      splitMode: false
+    operators:
+      stackgres:
+        enabled: true
+        replicas: 1
+        splitMode: false
+      cnpg:
+        enabled: true
+        replicas: 1
+        splitMode: false
+  namespace: appcat
+  enableMetrics: true
+  enableTracing: false
+  platform:
+    type: openshift
+    distribution: openshift4.12
+clusterConfig:
+  mode:
+    mode: service_cluster
+    controlPlaneKubeconfig: /etc/kubeconfig/control-plane
+  components:
+    controller:
+      enabled: false
+      replicas: 1
+      splitMode: false
+    apiServer:
+      enabled: false
+      replicas: 1
+      splitMode: false
+    sliExporter:
+      enabled: false
+      replicas: 1
+      splitMode: false
+    operators:
+      stackgres:
+        enabled: true
+        replicas: 1
+        splitMode: false
+      cnpg:
+        enabled: true
+        replicas: 1
+        splitMode: false
+  namespace: appcat
+  enableMetrics: true
+  enableTracing: false
+  platform:
+    type: openshift
+    distribution: openshift4.12

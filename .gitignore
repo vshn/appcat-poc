@@ -1,0 +1,24 @@
+# poc-xfn2 build artifacts
+poc-xfn2/function-appcat-poc
+poc-xfn2/poc-xfn2
+poc-xfn2/package/*.xpkg
+poc-xfn2/.work/
+
+# KCL build outputs
+kcl/out/
+kcl/.work/
+
+# Go
+*.test
+*.out
+
+# Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
