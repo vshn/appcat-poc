@@ -9,14 +9,14 @@ require (
 	github.com/go-logr/logr v1.4.3
 	github.com/pkg/errors v0.9.1
 	google.golang.org/grpc v1.75.1
-	k8s.io/api v0.33.0
-	k8s.io/apimachinery v0.33.0
+	k8s.io/api v0.33.3
+	k8s.io/apimachinery v0.33.3
 	sigs.k8s.io/controller-runtime v0.19.0
 )
 
 require (
 	dario.cat/mergo v1.0.2 // indirect
-	github.com/Masterminds/semver/v3 v3.1.1 // indirect
+	github.com/Masterminds/semver/v3 v3.3.0 // indirect
 	github.com/beorn7/perks v1.0.1 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/crossplane/crossplane-runtime/v2 v2.0.0 // indirect
@@ -76,10 +76,10 @@ require (
 	gopkg.in/inf.v0 v0.9.1 // indirect
 	gopkg.in/yaml.v2 v2.4.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
-	helm.sh/helm/v3 v3.10.2 // indirect
-	k8s.io/apiextensions-apiserver v0.33.0 // indirect
-	k8s.io/client-go v0.33.0 // indirect
-	k8s.io/code-generator v0.33.0 // indirect
+	helm.sh/helm/v3 v3.18.5 // indirect
+	k8s.io/apiextensions-apiserver v0.33.3 // indirect
+	k8s.io/client-go v0.33.3 // indirect
+	k8s.io/code-generator v0.33.3 // indirect
 	k8s.io/gengo/v2 v2.0.0-20250604051438-85fd79dbfd9f // indirect
 	k8s.io/klog/v2 v2.130.1 // indirect
 	k8s.io/kube-openapi v0.0.0-20250701173324-9bd5c66d9911 // indirect
@@ -88,5 +88,5 @@ require (
 	sigs.k8s.io/json v0.0.0-20241014173422-cfa47c3a1cc8 // indirect
 	sigs.k8s.io/randfill v1.0.0 // indirect
 	sigs.k8s.io/structured-merge-diff/v4 v4.6.0 // indirect
-	sigs.k8s.io/yaml v1.4.0 // indirect
+	sigs.k8s.io/yaml v1.5.0 // indirect
 )
