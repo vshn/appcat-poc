@@ -63,20 +63,23 @@ func getSecretName(composite *fnv1.Resource, compositeNamespace string, log logr
 		return compositeName, compositeNamespace, nil
 	}
 
-	secretRef, ok := writeSecretRef.(map[string]interface{})
+	// Type assert to map and use fieldpath to navigate the secret ref
+	secretRefMap, ok := writeSecretRef.(map[string]any)
 	if !ok {
+		log.Info("writeConnectionSecretToRef is not a map, using composite name", "name", compositeName)
 		return compositeName, compositeNamespace, nil
 	}
+	secretRefPaved := fieldpath.Pave(secretRefMap)
 
 	// Extract name and namespace
 	secretName := compositeName
 	secretNamespace := compositeNamespace
 
-	if name, ok := secretRef["name"].(string); ok && name != "" {
+	if name, err := secretRefPaved.GetString("name"); err == nil && name != "" {
 		secretName = name
 	}
 
-	if ns, ok := secretRef["namespace"].(string); ok && ns != "" {
+	if ns, err := secretRefPaved.GetString("namespace"); err == nil && ns != "" {
 		secretNamespace = ns
 	}
 
@@ -130,9 +133,16 @@ func generateResources(
 		return nil, nil, err
 	}
 
-	helmValues, ok := mergedConfig["helmValues"].(map[string]any)
+	// Extract helmValues using fieldpath
+	configPaved := fieldpath.Pave(mergedConfig)
+	helmValuesRaw, err := configPaved.GetValue("helmValues")
+	if err != nil {
+		return nil, nil, fmt.Errorf("helmValues not found in merged config: %w", err)
+	}
+
+	helmValues, ok := helmValuesRaw.(map[string]any)
 	if !ok {
-		return nil, nil, fmt.Errorf("helmValues not found in merged config")
+		return nil, nil, fmt.Errorf("helmValues is not a map")
 	}
 
 	// 3. Process connection secret configuration (optional)
@@ -240,24 +250,21 @@ func toFunctionResource(obj runtime.Object) (*fnv1.Resource, error) {
 
 // extractChartConfig extracts Helm chart configuration from merged config
 func extractChartConfig(mergedConfig map[string]any) (repo, name, version string, err error) {
-	chart, ok := mergedConfig["chart"].(map[string]any)
-	if !ok {
-		return "", "", "", fmt.Errorf("chart not found in merged config")
+	paved := fieldpath.Pave(mergedConfig)
+
+	name, err = paved.GetString("chart.name")
+	if err != nil {
+		return "", "", "", fmt.Errorf("chart.name not found: %w", err)
 	}
 
-	name, ok = chart["name"].(string)
-	if !ok {
-		return "", "", "", fmt.Errorf("chart.name not found")
+	repo, err = paved.GetString("chart.repository")
+	if err != nil {
+		return "", "", "", fmt.Errorf("chart.repository not found: %w", err)
 	}
 
-	repo, ok = chart["repository"].(string)
-	if !ok {
-		return "", "", "", fmt.Errorf("chart.repository not found")
-	}
-
-	version, ok = chart["defaultVersion"].(string)
-	if !ok {
-		return "", "", "", fmt.Errorf("chart.defaultVersion not found")
+	version, err = paved.GetString("chart.defaultVersion")
+	if err != nil {
+		return "", "", "", fmt.Errorf("chart.defaultVersion not found: %w", err)
 	}
 
 	return repo, name, version, nil
@@ -278,25 +285,41 @@ type ConnectionSecretConfig struct {
 
 // getConnectionSecretConfig extracts connectionSecret configuration from merged config
 func getConnectionSecretConfig(mergedConfig map[string]any) (*ConnectionSecretConfig, error) {
-	secretConfig, ok := mergedConfig["connectionSecret"].(map[string]any)
-	if !ok {
-		return nil, fmt.Errorf("connectionSecret not found in merged config")
+	paved := fieldpath.Pave(mergedConfig)
+
+	// Check if connectionSecret exists
+	secretConfigRaw, err := paved.GetValue("connectionSecret")
+	if err != nil {
+		return nil, fmt.Errorf("connectionSecret not found in merged config: %w", err)
 	}
+
+	secretConfig, ok := secretConfigRaw.(map[string]any)
+	if !ok {
+		return nil, fmt.Errorf("connectionSecret is not a map")
+	}
+
+	secretPaved := fieldpath.Pave(secretConfig)
 
 	// Parse fields array
 	fields := []SecretFieldTemplate{}
-	if fieldsRaw, ok := secretConfig["fields"].([]any); ok {
-		for _, fieldRaw := range fieldsRaw {
-			if fieldMap, ok := fieldRaw.(map[string]any); ok {
-				key, _ := fieldMap["key"].(string)
-				value, _ := fieldMap["value"].(string)
-				fields = append(fields, SecretFieldTemplate{Key: key, Value: value})
+	if fieldsRaw, err := secretPaved.GetValue("fields"); err == nil {
+		if fieldsArray, ok := fieldsRaw.([]any); ok {
+			for _, fieldRaw := range fieldsArray {
+				if fieldMap, ok := fieldRaw.(map[string]any); ok {
+					fieldPaved := fieldpath.Pave(fieldMap)
+					key, _ := fieldPaved.GetString("key")
+					value, _ := fieldPaved.GetString("value")
+					if key != "" && value != "" {
+						fields = append(fields, SecretFieldTemplate{Key: key, Value: value})
+					}
+				}
 			}
 		}
 	}
 
-	passwordPath, _ := secretConfig["passwordPath"].(string)
-	secretNamePath, _ := secretConfig["secretNamePath"].(string)
+	// Get optional paths
+	passwordPath, _ := secretPaved.GetString("passwordPath")
+	secretNamePath, _ := secretPaved.GetString("secretNamePath")
 
 	return &ConnectionSecretConfig{
 		Fields:         fields,

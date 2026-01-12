@@ -2,7 +2,6 @@ package main
 
 import (
 	"fmt"
-	"strings"
 
 	"github.com/crossplane/crossplane-runtime/pkg/fieldpath"
 	fnv1 "github.com/crossplane/function-sdk-go/proto/v1"
@@ -45,14 +44,14 @@ func extractServiceConfig(input *structpb.Struct) (map[string]any, error) {
 		return nil, fmt.Errorf("data is not a map")
 	}
 
-	// Validate required fields
-	if _, ok := data["chart"]; !ok {
+	dataPaved := fieldpath.Pave(data)
+	if _, err := dataPaved.GetValue("chart"); err != nil {
 		return nil, fmt.Errorf("chart not found in service config")
 	}
-	if _, ok := data["defaultHelmValues"]; !ok {
+	if _, err := dataPaved.GetValue("defaultHelmValues"); err != nil {
 		return nil, fmt.Errorf("defaultHelmValues not found in service config")
 	}
-	if _, ok := data["mapping"]; !ok {
+	if _, err := dataPaved.GetValue("mapping"); err != nil {
 		return nil, fmt.Errorf("mapping not found in service config")
 	}
 	// Note: connectionSecret is optional - not all services need it
@@ -63,20 +62,33 @@ func extractServiceConfig(input *structpb.Struct) (map[string]any, error) {
 // mergeConfigs merges service config with user spec using the provided mapping
 // Returns a merged config with: chart, helmValues (merged), connectionSecret
 func mergeConfigs(serviceConfig map[string]any, userSpec map[string]any, log logr.Logger) (map[string]any, error) {
+	servicePaved := fieldpath.Pave(serviceConfig)
+
 	// Start with service's defaultHelmValues (deep copy)
-	defaultHelmValues, ok := serviceConfig["defaultHelmValues"].(map[string]any)
+	defaultHelmValuesRaw, err := servicePaved.GetValue("defaultHelmValues")
+	if err != nil {
+		return nil, fmt.Errorf("defaultHelmValues not found: %w", err)
+	}
+	defaultHelmValues, ok := defaultHelmValuesRaw.(map[string]any)
 	if !ok {
 		return nil, fmt.Errorf("defaultHelmValues is not a map")
 	}
 	helmValues := deepCopy(defaultHelmValues)
 
 	// Get mapping
-	mapping, ok := serviceConfig["mapping"].(map[string]any)
+	mappingRaw, err := servicePaved.GetValue("mapping")
+	if err != nil {
+		return nil, fmt.Errorf("mapping not found: %w", err)
+	}
+	mapping, ok := mappingRaw.(map[string]any)
 	if !ok {
 		return nil, fmt.Errorf("mapping is not a map")
 	}
 
 	// Apply mappings: inject user spec values into helm values
+	userSpecPaved := fieldpath.Pave(userSpec)
+	helmValuesPaved := fieldpath.Pave(helmValues)
+
 	for xrdPath, helmPathRaw := range mapping {
 		helmPath, ok := helmPathRaw.(string)
 		if !ok {
@@ -84,8 +96,13 @@ func mergeConfigs(serviceConfig map[string]any, userSpec map[string]any, log log
 			continue
 		}
 
-		// Get value from user spec using XRD path
-		value, err := getValueByPath(userSpec, xrdPath)
+		// Get value from user spec using XRD path (remove "spec." prefix if present)
+		actualPath := xrdPath
+		if len(xrdPath) > 5 && xrdPath[:5] == "spec." {
+			actualPath = xrdPath[5:]
+		}
+
+		value, err := userSpecPaved.GetValue(actualPath)
 		if err != nil {
 			// User didn't provide this field - skip it
 			log.Info("User spec doesn't have value for path", "xrdPath", xrdPath)
@@ -93,88 +110,28 @@ func mergeConfigs(serviceConfig map[string]any, userSpec map[string]any, log log
 		}
 
 		// Set value in helm values using helm path
-		if err := setValueByPath(helmValues, helmPath, value); err != nil {
+		if err := helmValuesPaved.SetValue(helmPath, value); err != nil {
 			return nil, fmt.Errorf("failed to set helm value at %s: %w", helmPath, err)
 		}
 	}
 
+	chartRaw, err := servicePaved.GetValue("chart")
+	if err != nil {
+		return nil, fmt.Errorf("chart not found: %w", err)
+	}
+
 	// Return merged config
 	result := map[string]any{
-		"chart":      serviceConfig["chart"],
+		"chart":      chartRaw,
 		"helmValues": helmValues,
 	}
 
 	// Include connectionSecret if present in service config
-	if connectionSecret, ok := serviceConfig["connectionSecret"]; ok {
+	if connectionSecret, err := servicePaved.GetValue("connectionSecret"); err == nil {
 		result["connectionSecret"] = connectionSecret
 	}
 
 	return result, nil
-}
-
-// getValueByPath retrieves a value from a nested map using a dot-separated path
-// Example: "spec.size.cpu" -> userSpec["size"]["cpu"]
-func getValueByPath(data map[string]any, path string) (any, error) {
-	parts := strings.Split(path, ".")
-	current := any(data)
-
-	for i, part := range parts {
-		if i == 0 && part == "spec" {
-			continue
-		}
-
-		m, ok := current.(map[string]any)
-		if !ok {
-			return nil, fmt.Errorf("path %s: expected map at part %s, got %T", path, part, current)
-		}
-
-		value, ok := m[part]
-		if !ok {
-			return nil, fmt.Errorf("path %s: key %s not found", path, part)
-		}
-
-		current = value
-	}
-
-	return current, nil
-}
-
-// setValueByPath sets a value in a nested map using a dot-separated path
-// Creates intermediate maps if they don't exist
-// Example: "master.resources.requests.cpu" with value "1000m"
-func setValueByPath(data map[string]any, path string, value any) error {
-	parts := strings.Split(path, ".")
-	if len(parts) == 0 {
-		return fmt.Errorf("empty path")
-	}
-
-	// Navigate to the parent of the final key, creating maps as needed
-	current := data
-	for i := 0; i < len(parts)-1; i++ {
-		part := parts[i]
-
-		// Get or create the next level
-		next, ok := current[part]
-		if !ok {
-			// Create new map
-			next = make(map[string]any)
-			current[part] = next
-		}
-
-		// Ensure it's a map
-		nextMap, ok := next.(map[string]any)
-		if !ok {
-			return fmt.Errorf("path %s: expected map at part %s, got %T", path, part, next)
-		}
-
-		current = nextMap
-	}
-
-	// Set the final value
-	finalKey := parts[len(parts)-1]
-	current[finalKey] = value
-
-	return nil
 }
 
 // deepCopy creates a deep copy of a map[string]any
