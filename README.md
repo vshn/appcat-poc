@@ -35,16 +35,19 @@ https://miro.com/app/board/uXjVJiczJH0=/
 make setup    # Create Kind cluster + install Crossplane
 ```
 
-### 2. Build
+### 2. Build & Push
 
 ```bash
-make build    # Build platform, runtime, and redis-service package
+make build    # Build all packages locally
+make push     # Push packages to ghcr.io
 ```
 
 This:
-- Renders platform manifests (Function, Providers, ProviderConfigs)
-- Builds and loads the composition function into Kind
-- Builds the redis-service xpkg package
+- **build**: Renders platform manifests and builds xpkg packages locally
+  - Platform configuration (Function, Providers, ProviderConfigs)
+  - appcat-runtime function package (xpkg)
+  - redis-service configuration package (xpkg)
+- **push**: Pushes both xpkg packages to ghcr.io registry
 
 ### 3. Deploy
 
@@ -53,8 +56,9 @@ make deploy   # Deploy platform + redis-service configuration
 ```
 
 This:
-- Deploys platform infrastructure
-- Deploys `redis-service/configuration/config.yaml` which pulls the xpkg from GHCR
+- Deploys platform infrastructure (providers, functions)
+- Deploys `redis-service/configuration/config.yaml`
+- Crossplane pulls xpkg packages from ghcr.io and installs them
 
 ### 4. Create Redis Instance
 
@@ -96,14 +100,6 @@ kubectl get release -n default
 kubectl get secret redis-credentials -n default -o yaml
 ```
 
-### 6. Connect
-
-```bash
-PASSWORD=$(kubectl get secret redis-credentials -n default -o jsonpath='{.data.password}' | base64 -d)
-kubectl port-forward -n default svc/my-redis-master 6379:6379
-redis-cli -h localhost -p 6379 -a "$PASSWORD"
-```
-
 ## Debug Mode
 
 Develop the composition function locally without rebuilding images.
@@ -111,28 +107,34 @@ Develop the composition function locally without rebuilding images.
 ### Workflow
 
 ```bash
-# 1. Build with proxy mode
+# 1. Build with proxy mode (enables request forwarding)
 make build-proxy
 
-# 2. Deploy
+# 2. Push packages to registry
+make push
+
+# 3. Deploy
 make deploy
 
-# 3. Start local function (in separate terminal)
+# 4. Start local function (in separate terminal)
 make debug-start
 
-# 4. Stop debugging
+# 5. Stop debugging
 make debug-stop
 ```
 
 The function pod forwards requests to `host.docker.internal:9443`. Custom endpoint: `make build-proxy PROXY_ENDPOINT=127.18.0.1:9443`
+
+**Note**: Packages must be pushed to ghcr.io even in debug mode, as Crossplane requires them in the registry to resolve dependencies.
 
 ## Makefile Targets
 
 | Target | Description |
 |--------|-------------|
 | `make setup` | Create Kind cluster + install Crossplane |
-| `make build` | Build platform, runtime, and service package |
-| `make build-proxy` | Build with proxy mode for debugging |
+| `make build` | Build all packages locally (platform, runtime xpkg, service xpkg) |
+| `make push` | Push xpkg packages to ghcr.io registry |
+| `make build-proxy` | Build with proxy mode for local debugging |
 | `make deploy` | Deploy platform + service configuration |
 | `make test` | Create test Redis instance |
 | `make debug-start` | Start local function (blocking) |

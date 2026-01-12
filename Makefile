@@ -1,4 +1,4 @@
-.PHONY: help setup build deploy test clean kind-delete build-proxy debug-start debug-stop
+.PHONY: help setup build push build-proxy deploy test clean kind-delete debug-start debug-stop
 
 # Default proxy endpoint for debug mode
 PROXY_ENDPOINT ?= host.docker.internal:9443
@@ -11,7 +11,8 @@ help:
 	@echo "  setup                - Create Kind cluster + install Crossplane"
 	@echo ""
 	@echo "Build:"
-	@echo "  build                - Build platform, runtime, and redis-service package"
+	@echo "  build                - Build all packages locally"
+	@echo "  push                 - Push built packages to ghcr.io"
 	@echo "  build-proxy          - Build with proxy mode for local debugging"
 	@echo ""
 	@echo "Deploy:"
@@ -39,38 +40,56 @@ setup:
 		--namespace crossplane-system \
 		--create-namespace \
 		--wait
-	@echo "✅ Cluster setup complete!"
+	@echo "Cluster setup complete!"
 
-# Build: Platform + Runtime + Service Package
+# Build all packages locally
 build:
-	@echo "Building all components..."
+	@echo "Building all packages locally..."
 	@echo ""
 	@echo "[1/3] Building platform..."
 	@cd platform && $(MAKE) build
 	@echo ""
-	@echo "[2/3] Building appcat-runtime and loading into Kind..."
-	@cd appcat-runtime && $(MAKE) kind-load
+	@echo "[2/3] Building appcat-runtime xpkg..."
+	@cd appcat-runtime && $(MAKE) build-xpkg
 	@echo ""
-	@echo "[3/3] Building redis-service package and loading into Kind..."
+	@echo "[3/3] Building redis-service xpkg..."
+	@cd redis-service && $(MAKE) build
+	@echo ""
+	@echo "All packages built!"
+
+# Push built packages to registry
+push:
+	@echo "Pushing all packages to ghcr.io..."
+	@echo ""
+	@echo "[1/2] Pushing appcat-runtime function..."
+	@cd appcat-runtime && $(MAKE) push
+	@echo ""
+	@echo "[2/2] Pushing redis-service package..."
 	@cd redis-service && $(MAKE) push
 	@echo ""
-	@echo "Build complete!"
+	@echo "All packages pushed to ghcr.io!"
 
-# Build with proxy mode for debugging
+# Build with proxy mode for local debugging
 build-proxy:
 	@echo "Building in proxy/debug mode..."
 	@echo ""
-	@echo "[1/2] Building platform with proxy enabled (endpoint: $(PROXY_ENDPOINT))..."
+	@echo "[1/3] Building platform with proxy enabled (endpoint: $(PROXY_ENDPOINT))..."
 	@cd platform && $(MAKE) build-proxy PROXY_ENDPOINT=$(PROXY_ENDPOINT)
 	@echo ""
-	@echo "[2/2] Building redis-service package and loading into Kind..."
-	@cd redis-service && $(MAKE) push
+	@echo "[2/3] Building appcat-runtime xpkg..."
+	@cd appcat-runtime && $(MAKE) build-xpkg
+	@echo ""
+	@echo "[3/3] Building redis-service xpkg..."
+	@cd redis-service && $(MAKE) build
 	@echo ""
 	@echo "Build complete in proxy mode!"
 	@echo ""
+	@echo "Remember to push packages: make push"
+	@echo ""
 	@echo "Next steps:"
-	@echo "  1. Deploy: make deploy"
-	@echo "  2. Start local function: make debug-start"
+	@echo "  1. Push packages: make push"
+	@echo "  2. Deploy: make deploy"
+	@echo "  3. Start local function: make debug-start"
 
 # Deploy: Platform infrastructure + Redis service configuration
 deploy:
