@@ -1,6 +1,6 @@
 .PHONY: build kind-load clean
 
-IMAGE ?= ghcr.io/zugao/function-appcat-poc
+IMAGE ?= ghcr.io/vshn/function-appcat-poc
 TAG ?= v0.1.0
 KIND_CLUSTER ?= appcat-poc
 

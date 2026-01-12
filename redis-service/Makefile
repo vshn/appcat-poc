@@ -1,7 +1,7 @@
 .PHONY: build push clean
 
 # Package configuration
-XPKG_REGISTRY ?= ghcr.io/zugao/redis-service
+XPKG_REGISTRY ?= ghcr.io/vshn/redis-service
 XPKG_VERSION := v0.1.0
 
 # Build Crossplane package (xpkg)

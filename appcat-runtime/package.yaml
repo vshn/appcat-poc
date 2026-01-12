@@ -11,4 +11,4 @@ spec:
   capabilities:
     - Composition
   controller:
-    image: ghcr.io/zugao/function-appcat-poc:v0.1.0
+    image: ghcr.io/vshn/function-appcat-poc:v0.1.0

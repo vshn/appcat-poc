@@ -3,4 +3,4 @@ kind: Configuration
 metadata:
   name: redis-service
 spec:
-  package: ghcr.io/zugao/redis-service:v0.1.0
+  package: ghcr.io/vshn/redis-service:v0.1.0

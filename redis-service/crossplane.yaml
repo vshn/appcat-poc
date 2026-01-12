@@ -4,9 +4,9 @@ metadata:
   name: redis-service
   annotations:
     meta.crossplane.io/maintainer: VSHN Team
-    meta.crossplane.io/source: github.com/zugao/appcat-poc
+    meta.crossplane.io/source: github.com/vshn/appcat-poc
     meta.crossplane.io/license: Apache-2.0
-    meta.crossplane.io/repository: ghcr.io/zugao/redis-service
+    meta.crossplane.io/repository: ghcr.io/vshn/redis-service
     meta.crossplane.io/description: |
       Redis service composition for AppCat Framework 2.0.
       Provides a namespace-scoped XVSHNRedis composite resource that deploys
@@ -44,5 +44,5 @@ spec:
   dependsOn:
     - provider: xpkg.upbound.io/crossplane-contrib/provider-helm
       version: ">=v1.0.6"
-    - function: ghcr.io/zugao/function-appcat-poc
+    - function: ghcr.io/vshn/function-appcat-poc
       version: ">=v0.1.0"
