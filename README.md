@@ -1,3 +1,5 @@
+⚠️ This PoC has been superseded by [Helmetica](https://github.com/helmetica-framework), a Crossplane free, green field, AppCat 2.0 experiment. Track the progress in the [Framework 2.0 Decision Index](https://kb.vshn.ch/app-catalog/framework/framework-2-0/index.html).
+
 # AppCat PoC - Framework 2.0 Implementation
 
 Proof of concept for Application Catalog Framework 2.0 using Crossplane 2.0, KCL, and composition functions.
